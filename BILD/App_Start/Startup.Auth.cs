@@ -10,6 +10,7 @@ using Microsoft.Owin.Security.OAuth;
 using Owin;
 using BILD.Providers;
 using BILD.Models;
+using System.Security.Claims;
 
 namespace BILD
 {
@@ -32,17 +33,29 @@ namespace BILD
             app.UseExternalSignInCookie(DefaultAuthenticationTypes.ExternalCookie);
 
             // Configure la aplicación para el flujo basado en OAuth
-            PublicClientId = "self";
+            //Efectúa una autenticación básica basada en una única credencial
+            
             OAuthOptions = new OAuthAuthorizationServerOptions
             {
-                TokenEndpointPath = new PathString("/Token"),
-                Provider = new ApplicationOAuthProvider(PublicClientId),
-                AuthorizeEndpointPath = new PathString("/api/Account/ExternalLogin"),
-                AccessTokenExpireTimeSpan = TimeSpan.FromDays(14),
-                // En el modo de producción establezca AllowInsecureHttp = false
-                AllowInsecureHttp = true
+                TokenEndpointPath = new PathString("/token"),
+                Provider = new OAuthAuthorizationServerProvider()
+                {
+                    OnValidateClientAuthentication = async (context) =>
+                    {
+                        context.Validated();
+                    },
+                    OnGrantResourceOwnerCredentials = async (context) =>
+                    {
+                        if (context.UserName == "mario" && context.Password == "123")
+                        {
+                            ClaimsIdentity oAuthIdentity = new ClaimsIdentity(context.Options.AuthenticationType);
+                            context.Validated(oAuthIdentity);
+                        }
+                    }
+                },
+                AllowInsecureHttp = true,
+                AccessTokenExpireTimeSpan = TimeSpan.FromDays(1)
             };
-
             // Permitir que la aplicación use tokens portadores para autenticar usuarios
             app.UseOAuthBearerTokens(OAuthOptions);
 
@@ -59,11 +72,7 @@ namespace BILD
             //    appId: "",
             //    appSecret: "");
 
-            //app.UseGoogleAuthentication(new GoogleOAuth2AuthenticationOptions()
-            //{
-            //    ClientId = "",
-            //    ClientSecret = ""
-            //});
+
         }
     }
 }
