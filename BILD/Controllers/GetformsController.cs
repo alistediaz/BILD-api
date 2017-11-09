@@ -10,6 +10,7 @@ using System.Web.Http;
 
 namespace BILD.Controllers
 {
+    [Authorize]
     public class GetformsController : ApiController
     {
         // GET: api/Getforms

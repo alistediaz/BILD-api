@@ -11,6 +11,8 @@ using Owin;
 using BILD.Providers;
 using BILD.Models;
 using System.Security.Claims;
+using Microsoft.Owin.Infrastructure;
+using System.Web.Http;
 
 namespace BILD
 {
@@ -23,41 +25,48 @@ namespace BILD
         // Para obtener más información para configurar la autenticación, visite http://go.microsoft.com/fwlink/?LinkId=301864
         public void ConfigureAuth(IAppBuilder app)
         {
-            // Configure el contexto de base de datos y el administrador de usuarios para usar una única instancia por solicitud
-            app.CreatePerOwinContext(ApplicationDbContext.Create);
-            app.CreatePerOwinContext<ApplicationUserManager>(ApplicationUserManager.Create);
-
-            // Permitir que la aplicación use una cookie para almacenar información para el usuario que inicia sesión
-            // y una cookie para almacenar temporalmente información sobre un usuario que inicia sesión con un proveedor de inicio de sesión de terceros
-            app.UseCookieAuthentication(new CookieAuthenticationOptions());
-            app.UseExternalSignInCookie(DefaultAuthenticationTypes.ExternalCookie);
-
-            // Configure la aplicación para el flujo basado en OAuth
-            //Efectúa una autenticación básica basada en una única credencial
-            
-            OAuthOptions = new OAuthAuthorizationServerOptions
+            var oauthProvider = new OAuthAuthorizationServerProvider
             {
-                TokenEndpointPath = new PathString("/token"),
-                Provider = new OAuthAuthorizationServerProvider()
+                OnGrantResourceOwnerCredentials = async context =>
                 {
-                    OnValidateClientAuthentication = async (context) =>
+                    if (context.UserName == "mario" && context.Password == "123")
                     {
-                        context.Validated();
-                    },
-                    OnGrantResourceOwnerCredentials = async (context) =>
+                        var claimsIdentity = new ClaimsIdentity(context.Options.AuthenticationType);
+                        claimsIdentity.AddClaim(new Claim("user", context.UserName));
+                        context.Validated(claimsIdentity);
+                        return;
+                    }
+                    context.Rejected();
+                },
+                OnValidateClientAuthentication = async context =>
+                {
+                    string clientId;
+                    string clientSecret;
+                    if (context.TryGetBasicCredentials(out clientId, out clientSecret))
                     {
-                        if (context.UserName == "mario" && context.Password == "123")
+                        if (clientId == "BILD" && clientSecret == "test")
                         {
-                            ClaimsIdentity oAuthIdentity = new ClaimsIdentity(context.Options.AuthenticationType);
-                            context.Validated(oAuthIdentity);
+                            context.Validated();
                         }
                     }
-                },
-                AllowInsecureHttp = true,
-                AccessTokenExpireTimeSpan = TimeSpan.FromDays(1)
+                }
             };
-            // Permitir que la aplicación use tokens portadores para autenticar usuarios
-            app.UseOAuthBearerTokens(OAuthOptions);
+            var oauthOptions = new OAuthAuthorizationServerOptions
+            {
+                AllowInsecureHttp = true,
+                TokenEndpointPath = new PathString("/token"),
+                Provider = oauthProvider,
+                AuthorizationCodeExpireTimeSpan = TimeSpan.FromMinutes(1),
+                AccessTokenExpireTimeSpan = TimeSpan.FromMinutes(3),
+                SystemClock = new SystemClock()
+
+            };
+            app.UseOAuthAuthorizationServer(oauthOptions);
+            app.UseOAuthBearerAuthentication(new OAuthBearerAuthenticationOptions());
+
+            var config = new HttpConfiguration();
+            config.MapHttpAttributeRoutes();
+            app.UseWebApi(config);
 
             // Quitar los comentarios de las siguientes líneas para habilitar el inicio de sesión con proveedores de inicio de sesión de terceros
             //app.UseMicrosoftAccountAuthentication(
